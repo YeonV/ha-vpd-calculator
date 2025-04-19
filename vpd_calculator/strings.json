@@ -1,0 +1,19 @@
+{
+    "config": {
+      "step": {
+        "user": {
+          "title": "Configure VPD Calculator",
+          "description": "Select sensors and the device to link the VPD sensor to.",
+          "data": {
+            "name": "Name",
+            "temp_sensor": "Temperature Sensor",
+            "humidity_sensor": "Humidity Sensor",
+            "leaf_delta": "Leaf Temperature Offset (°C/°F)",
+            "target_device": "Target Device"
+          }
+        }
+      },
+      "error": {},
+      "abort": {}
+    }
+  }
