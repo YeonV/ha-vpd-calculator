@@ -1,0 +1,7 @@
+{
+    "name": "VPD Calculator",
+    "content_in_root": false,
+    "render_readme": true,
+    "country": ["DE", "AT", "CH", "US", "GB"],
+    "domains": ["sensor"]
+  }

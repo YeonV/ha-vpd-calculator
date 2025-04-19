@@ -1,7 +1,7 @@
 {
     "domain": "vpd_calculator",
     "name": "VPD Calculator",
-    "version": "1.0.0",
+    "version": "0.0.1",
     "config_flow": true,
     "documentation": "https://github.com/YeonV/ha-vpd-calculator",
     "issue_tracker": "https://github.com/YeonV/ha-vpd-calculator/issues",
