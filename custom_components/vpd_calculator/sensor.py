@@ -65,6 +65,11 @@ class VPDSensor(SensorEntity):
         target_device_id: str,
     ) -> None:
         """Initialize the sensor."""
+        _LOGGER.debug(
+            "Initializing VPDSensor '%s' (unique base: %s)", name, unique_id_base
+        )
+        _LOGGER.debug("Received target_device_id: %s", target_device_id)
+
         self._hass = hass
         self._temp_id = temp_id
         self._hum_id = hum_id
@@ -73,7 +78,9 @@ class VPDSensor(SensorEntity):
         # --- Linking ---
         # This attribute tells HA to link this entity to the target device page
         self._attr_device_id = target_device_id
-
+        _LOGGER.debug(
+            "Set _attr_device_id to: %s for entity %s", self._attr_device_id, name
+        )
         # --- Entity Attributes ---
         self._attr_name = name # Use the name from config flow
         self._attr_unique_id = f"{unique_id_base}_vpd" # Ensure unique ID
