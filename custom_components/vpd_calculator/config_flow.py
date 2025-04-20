@@ -7,7 +7,7 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
-from homeassistant.core import callback
+# from homeassistant.core import callback
 from homeassistant.helpers import selector
 
 from .const import DOMAIN
@@ -54,7 +54,6 @@ class VPDCalculatorConfigFlow(ConfigFlow, domain=DOMAIN):
 
             return self.async_create_entry(title=user_input["name"], data=user_input)
 
-        # Show the form to the user
         return self.async_show_form(
             step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
         )
