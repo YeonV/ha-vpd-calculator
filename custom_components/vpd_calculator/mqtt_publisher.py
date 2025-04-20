@@ -1,3 +1,5 @@
+# /config/custom_components/vpd_calculator/mqtt_publisher.py
+
 """Handles VPD Calculation and MQTT Publishing."""
 from __future__ import annotations
 
@@ -6,21 +8,23 @@ import logging
 import math
 
 from homeassistant.components import mqtt
+# MqttAvailability import removed as it wasn't used and caused issues
+from homeassistant.config_entries import ConfigEntry
+# Import sensor specific Enums correctly
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorStateClass,
 )
-
-from homeassistant.config_entries import ConfigEntry
+# Import general constants correctly
 from homeassistant.const import (
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
     UnitOfPressure,
 )
 from homeassistant.core import Event, HomeAssistant, callback
-from homeassistant.helpers.device_registry import DeviceRegistry, async_get as async_get_device_registry # To get device identifiers
+from homeassistant.helpers.device_registry import DeviceRegistry, async_get as async_get_device_registry
 from homeassistant.helpers.event import async_track_state_change_event
-from homeassistant.helpers.typing import UndefinedType # Added
+# from homeassistant.helpers.typing import UndefinedType # Not strictly needed here
 
 from .const import DOMAIN, MQTT_PREFIX
 
@@ -67,7 +71,7 @@ class VPDCalculatorMqttPublisher:
         # Unique ID for the MQTT sensor entity
         self._mqtt_unique_id = f"{self.entry_id}_vpd_mqtt"
 
-        self._target_device_identifiers = None # Will be looked up
+        self._target_device_identifiers_for_mqtt = None # Will be looked up
         self._temp_state = None
         self._hum_state = None
         self._vpd_state = None
@@ -81,37 +85,41 @@ class VPDCalculatorMqttPublisher:
         _LOGGER.debug("[%s] Starting setup", self.entry_id)
 
         # 1. Get target device identifiers
+        dev_reg: DeviceRegistry = async_get_device_registry(self.hass)
+        target_device = dev_reg.async_get(self._target_device_id)
+        if not target_device:
+            _LOGGER.error(
+                "[%s] Target device ID '%s' not found in registry. Cannot set up MQTT sensor.",
+                self.entry_id,
+                self._target_device_id,
+            )
+            return # Cannot proceed without target device
+
         # Extract identifiers - expecting tuples like ('mqtt', 'id') or just strings
         device_ids_list = []
         for identifier in target_device.identifiers:
-            if isinstance(identifier, (list, tuple)) and len(identifier) == 2:
-                # If it's a tuple like ('mqtt', 'xyz'), often the second part is the key ID
-                device_ids_list.append(str(identifier[1]))
+            if isinstance(identifier, (list, tuple)) and len(identifier) >= 1:
+                # If it's a tuple like ('mqtt', 'xyz'), use the second part if available, else first
+                # If it's just ('xyz',), use 'xyz'
+                id_str = str(identifier[1]) if len(identifier) > 1 else str(identifier[0])
+                device_ids_list.append(id_str)
             elif isinstance(identifier, str):
                 # If it's already a string
                 device_ids_list.append(identifier)
 
         if not device_ids_list:
-            _LOGGER.error(
+             _LOGGER.error(
                 "[%s] Could not extract usable string identifiers from target device: %s",
                 self.entry_id,
                 target_device.identifiers,
-            )
-            return # Cannot proceed
+             )
+             return # Cannot proceed
 
         self._target_device_identifiers_for_mqtt = device_ids_list # Store the list of strings
         _LOGGER.debug(
             "[%s] Found target device identifiers for MQTT: %s",
             self.entry_id,
             self._target_device_identifiers_for_mqtt,
-        )
-
-        # Use the first identifier set found (usually sufficient)
-        self._target_device_identifiers = list(target_device.identifiers)[0]
-        _LOGGER.debug(
-            "[%s] Found target device identifiers: %s",
-            self.entry_id,
-            self._target_device_identifiers,
         )
 
         # 2. Construct Discovery Payload
@@ -121,7 +129,7 @@ class VPDCalculatorMqttPublisher:
         discovery_payload["unique_id"] = self._mqtt_unique_id
         discovery_payload["availability_topic"] = self._availability_topic
         discovery_payload["device"] = {
-            "identifiers": self._target_device_identifiers_for_mqtt # <<< Use the list of strings directly
+            "identifiers": self._target_device_identifiers_for_mqtt # Use the list of strings directly
         }
 
         discovery_json = json.dumps(discovery_payload)
@@ -140,13 +148,16 @@ class VPDCalculatorMqttPublisher:
         )
 
         # 5. Get initial states and publish first state/availability
-        await self._update_initial_states()
-        await self._update_and_publish() # Calculate and publish
+        # Call synchronous helper to get initial states
+        self._update_initial_states()
+        # Call the now async method to calculate and publish
+        await self._update_and_publish()
 
         _LOGGER.info("[%s] Setup complete. MQTT sensor '%s' configured.", self.entry_id, self._mqtt_unique_id)
 
 
-    async def _update_initial_states(self) -> None:
+    # This helper can remain synchronous as it only reads states
+    def _update_initial_states(self) -> None:
         """Get initial states of source sensors."""
         temp_state_obj = self.hass.states.get(self._temp_id)
         hum_state_obj = self.hass.states.get(self._hum_id)
@@ -159,9 +170,11 @@ class VPDCalculatorMqttPublisher:
             except (ValueError, TypeError): self._hum_state = None
 
 
+    # This is a callback triggered by the event listener, keep it synchronous
+    # but schedule the async task it needs to run.
     @callback
     def _handle_state_update_event(self, event: Event) -> None:
-        """Handle state changes of source sensors and update."""
+        """Handle state changes of source sensors and schedule update."""
         new_state = event.data.get("new_state")
         entity_id = event.data.get("entity_id")
         _LOGGER.debug("[%s] State change detected for %s", self.entry_id, entity_id)
@@ -174,15 +187,17 @@ class VPDCalculatorMqttPublisher:
                 _LOGGER.warning("[%s] Could not parse state for %s: %s", self.entry_id, entity_id, new_state.state)
                 state_value = None
 
+        # Update internal state synchronously
         if entity_id == self._temp_id:
             self._temp_state = state_value
         elif entity_id == self._hum_id:
             self._hum_state = state_value
 
-        await self._update_and_publish()
+        # Schedule the async calculation and publishing task
+        self.hass.async_create_task(self._update_and_publish())
 
 
-    @callback
+    # This function now needs to be async because it awaits mqtt.async_publish
     async def _update_and_publish(self) -> None:
         """Calculate VPD and publish state and availability via MQTT."""
         old_available = self._available
@@ -209,17 +224,21 @@ class VPDCalculatorMqttPublisher:
 
         # Publish changes
         availability_changed = (old_available != self._available)
-        state_changed = (self._vpd_state != old_vpd_state)
+        # Also consider state changed if availability changed from unavailable to available
+        state_changed = (self._vpd_state != old_vpd_state) or (availability_changed and self._available)
 
         if availability_changed:
             payload = "online" if self._available else "offline"
             _LOGGER.debug("[%s] Publishing availability to %s: %s", self.entry_id, self._availability_topic, payload)
-            await mqtt.async_publish(self.hass, self._availability_topic, payload, qos=0, retain=True) # Retain availability
+            # --- Await added ---
+            await mqtt.async_publish(self.hass, self._availability_topic, payload, qos=0, retain=True)
 
         # Only publish state if available and changed
+        # (No need to publish None/null state when becoming unavailable, availability topic handles that)
         if self._available and state_changed:
             _LOGGER.debug("[%s] Publishing state to %s: %s", self.entry_id, self._state_topic, self._vpd_state)
-            await mqtt.async_publish(self.hass, self._state_topic, str(self._vpd_state), qos=0, retain=True) # Retain state
+            # --- Await added ---
+            await mqtt.async_publish(self.hass, self._state_topic, str(self._vpd_state), qos=0, retain=True)
 
 
     async def async_unload(self) -> bool:
@@ -227,10 +246,12 @@ class VPDCalculatorMqttPublisher:
         _LOGGER.debug("[%s] Unloading", self.entry_id)
         # Remove MQTT discovery message
         _LOGGER.debug("[%s] Publishing empty discovery message to %s", self.entry_id, self._config_topic)
+        # --- Await added ---
         await mqtt.async_publish(self.hass, self._config_topic, "", qos=0, retain=False)
 
         # Remove availability message
         _LOGGER.debug("[%s] Publishing empty availability message to %s", self.entry_id, self._availability_topic)
+         # --- Await added ---
         await mqtt.async_publish(self.hass, self._availability_topic, "", qos=0, retain=True) # Clear retained availability
 
         # Stop listeners
