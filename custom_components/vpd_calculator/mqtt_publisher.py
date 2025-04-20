@@ -6,13 +6,15 @@ import logging
 import math
 
 from homeassistant.components import mqtt
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorStateClass,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
     UnitOfPressure,
-    SensorDeviceClass, # Need these for discovery payload
-    SensorStateClass,
 )
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceRegistry, async_get as async_get_device_registry # To get device identifiers
