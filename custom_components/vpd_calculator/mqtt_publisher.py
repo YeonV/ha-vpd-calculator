@@ -81,15 +81,30 @@ class VPDCalculatorMqttPublisher:
         _LOGGER.debug("[%s] Starting setup", self.entry_id)
 
         # 1. Get target device identifiers
-        dev_reg: DeviceRegistry = async_get_device_registry(self.hass)
-        target_device = dev_reg.async_get(self._target_device_id)
-        if not target_device:
+        # Extract identifiers - expecting tuples like ('mqtt', 'id') or just strings
+        device_ids_list = []
+        for identifier in target_device.identifiers:
+            if isinstance(identifier, (list, tuple)) and len(identifier) == 2:
+                # If it's a tuple like ('mqtt', 'xyz'), often the second part is the key ID
+                device_ids_list.append(str(identifier[1]))
+            elif isinstance(identifier, str):
+                # If it's already a string
+                device_ids_list.append(identifier)
+
+        if not device_ids_list:
             _LOGGER.error(
-                "[%s] Target device ID '%s' not found in registry. Cannot set up MQTT sensor.",
+                "[%s] Could not extract usable string identifiers from target device: %s",
                 self.entry_id,
-                self._target_device_id,
+                target_device.identifiers,
             )
-            return # Cannot proceed without target device
+            return # Cannot proceed
+
+        self._target_device_identifiers_for_mqtt = device_ids_list # Store the list of strings
+        _LOGGER.debug(
+            "[%s] Found target device identifiers for MQTT: %s",
+            self.entry_id,
+            self._target_device_identifiers_for_mqtt,
+        )
 
         # Use the first identifier set found (usually sufficient)
         self._target_device_identifiers = list(target_device.identifiers)[0]
@@ -106,8 +121,7 @@ class VPDCalculatorMqttPublisher:
         discovery_payload["unique_id"] = self._mqtt_unique_id
         discovery_payload["availability_topic"] = self._availability_topic
         discovery_payload["device"] = {
-            "identifiers": [list(self._target_device_identifiers)] # Needs to be list of lists/tuples
-            # Potentially add other device info if needed, but identifiers is key
+            "identifiers": self._target_device_identifiers_for_mqtt # <<< Use the list of strings directly
         }
 
         discovery_json = json.dumps(discovery_payload)
@@ -200,12 +214,12 @@ class VPDCalculatorMqttPublisher:
         if availability_changed:
             payload = "online" if self._available else "offline"
             _LOGGER.debug("[%s] Publishing availability to %s: %s", self.entry_id, self._availability_topic, payload)
-            mqtt.async_publish(self.hass, self._availability_topic, payload, qos=0, retain=True) # Retain availability
+            await mqtt.async_publish(self.hass, self._availability_topic, payload, qos=0, retain=True) # Retain availability
 
         # Only publish state if available and changed
         if self._available and state_changed:
             _LOGGER.debug("[%s] Publishing state to %s: %s", self.entry_id, self._state_topic, self._vpd_state)
-            mqtt.async_publish(self.hass, self._state_topic, str(self._vpd_state), qos=0, retain=True) # Retain state
+            await mqtt.async_publish(self.hass, self._state_topic, str(self._vpd_state), qos=0, retain=True) # Retain state
 
 
     async def async_unload(self) -> bool:
