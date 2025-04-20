@@ -183,7 +183,7 @@ class VPDCalculatorMqttPublisher:
 
 
     @callback
-    def async _update_and_publish(self) -> None:
+    async def _update_and_publish(self) -> None:
         """Calculate VPD and publish state and availability via MQTT."""
         old_available = self._available
         old_vpd_state = self._vpd_state
