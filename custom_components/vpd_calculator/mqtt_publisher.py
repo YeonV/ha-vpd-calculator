@@ -6,7 +6,6 @@ import logging
 import math
 
 from homeassistant.components import mqtt
-# from homeassistant.components.mqtt import MqttAvailability # Added
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     STATE_UNAVAILABLE,
