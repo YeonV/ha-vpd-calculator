@@ -92,7 +92,18 @@ class VPDSensor(SensorEntity):
         # --- Store current source states ---
         self._temp_state = None
         self._hum_state = None
-
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device information specific to this instance of the calculator."""
+        return DeviceInfo(
+            # Link to the *config entry* that created this entity
+            identifiers={(DOMAIN, self._config_entry_id)},
+            # Give the virtual device representing this calculator instance a name
+            name=f"VPD Calculator ({self._attr_name})",
+            manufacturer="YeonV", # Or your name/handle
+            entry_type="service", # Indicates it's a calculated/service entity's "device"
+            model="VPD Calculator v1.0", # Optional model info
+        )
     @callback
     def _handle_state_update_event(self, event: Event) -> None:
         """Handle state changes of source sensors."""
