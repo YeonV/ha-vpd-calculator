@@ -141,7 +141,7 @@ class VPDCalculatorMqttPublisher:
 
         # 5. Get initial states and publish first state/availability
         await self._update_initial_states()
-        self._update_and_publish() # Calculate and publish
+        await self._update_and_publish() # Calculate and publish
 
         _LOGGER.info("[%s] Setup complete. MQTT sensor '%s' configured.", self.entry_id, self._mqtt_unique_id)
 
@@ -179,11 +179,11 @@ class VPDCalculatorMqttPublisher:
         elif entity_id == self._hum_id:
             self._hum_state = state_value
 
-        self._update_and_publish()
+        await self._update_and_publish()
 
 
     @callback
-    def _update_and_publish(self) -> None:
+    def async _update_and_publish(self) -> None:
         """Calculate VPD and publish state and availability via MQTT."""
         old_available = self._available
         old_vpd_state = self._vpd_state
