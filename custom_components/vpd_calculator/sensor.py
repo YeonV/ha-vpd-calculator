@@ -76,7 +76,7 @@ class VPDSensor(SensorEntity):
         self._hum_id = hum_id
         self._delta = delta
         self._config_entry_id = unique_id_base
-        
+        _LOGGER.debug("Stored _config_entry_id: %s", self._config_entry_id)
         # --- Linking ---
         # This attribute tells HA to link this entity to the target device page
         self._attr_device_id = target_device_id
