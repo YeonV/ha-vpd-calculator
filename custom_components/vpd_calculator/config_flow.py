@@ -27,7 +27,8 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional("leaf_delta", default=0.0): selector.NumberSelector( # Changed default to 0.0 as it's often negligible/unknown
             selector.NumberSelectorConfig(min=-5.0, max=5.0, step=0.1, mode="box"),
         ),
-        vol.Required("target_device"): selector.DeviceSelector(),
+        vol.Optional("target_device"): selector.DeviceSelector(),
+        vol.Optional("create_threshold_entities", default=True): bool,
     }
 )
 
