@@ -9,7 +9,7 @@ import math
 from typing import Any # Added
 
 from homeassistant.components import mqtt
-from homeassistant.components.mqtt.models import MqttMessage # Added for type hinting
+# from homeassistant.components.mqtt.models import MqttMessage # Added for type hinting
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -238,21 +238,21 @@ class VPDCalculatorMqttPublisher:
 
     # --- Command Handlers for Numbers ---
     @callback
-    async def _handle_low_threshold_command(self, msg: MqttMessage) -> None:
+    async def _handle_low_threshold_command(self, msg: any) -> None:
         """Handle new low threshold value from MQTT command topic."""
         await self._handle_threshold_command(
             msg, CONF_KEY_LOW_THRESHOLD, self._low_thresh_state_topic, DEFAULT_LOW_THRESHOLD
         )
 
     @callback
-    async def _handle_high_threshold_command(self, msg: MqttMessage) -> None:
+    async def _handle_high_threshold_command(self, msg: any) -> None:
         """Handle new high threshold value from MQTT command topic."""
         await self._handle_threshold_command(
             msg, CONF_KEY_HIGH_THRESHOLD, self._high_thresh_state_topic, DEFAULT_HIGH_THRESHOLD
         )
 
     async def _handle_threshold_command(
-        self, msg: MqttMessage, conf_key: str, state_topic: str, default_value: float
+        self, msg: any, conf_key: str, state_topic: str, default_value: float
     ) -> None:
         """Generic handler for threshold command messages."""
         try:
