@@ -1,59 +1,96 @@
 # /config/custom_components/vpd_calculator/mqtt_publisher.py
 
-"""Handles VPD Calculation and MQTT Publishing."""
+"""Handles VPD Calculation and MQTT Publishing for Sensor and Thresholds."""
 from __future__ import annotations
 
 import json
 import logging
 import math
+from typing import Any # Added
 
 from homeassistant.components import mqtt
-# MqttAvailability import removed as it wasn't used and caused issues
+from homeassistant.components.mqtt.models import MqttMessage # Added for type hinting
 from homeassistant.config_entries import ConfigEntry
-# Import sensor specific Enums correctly
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorStateClass,
 )
-# Import general constants correctly
+# Import number specific stuff
+from homeassistant.components.number import (
+    NumberDeviceClass, # Optional, but good practice if applicable (None here)
+    NumberMode, # For slider/box mode
+)
 from homeassistant.const import (
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
     UnitOfPressure,
 )
 from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError # Added for validation
 from homeassistant.helpers.device_registry import DeviceRegistry, async_get as async_get_device_registry
 from homeassistant.helpers.event import async_track_state_change_event
-# from homeassistant.helpers.typing import UndefinedType # Not strictly needed here
+from homeassistant.helpers.restore_state import RestoreEntity # May need later if not using config entry storage
 
 from .const import DOMAIN, MQTT_PREFIX
 
 _LOGGER = logging.getLogger(__name__)
 
-# MQTT Discovery settings
-DISCOVERY_PAYLOAD_SCHEMA = {
-    "name": None, # Set dynamically
-    "state_topic": None, # Set dynamically
-    "unique_id": None, # Set dynamically
+# --- Constants for Thresholds ---
+CONF_KEY_LOW_THRESHOLD = "low_threshold"
+CONF_KEY_HIGH_THRESHOLD = "high_threshold"
+DEFAULT_LOW_THRESHOLD = 0.8
+DEFAULT_HIGH_THRESHOLD = 1.2
+DEFAULT_THRESHOLD_MIN = 0.1
+DEFAULT_THRESHOLD_MAX = 2.5
+DEFAULT_THRESHOLD_STEP = 0.05
+# -----------------------------
+
+# MQTT Discovery settings - Sensor
+DISCOVERY_PAYLOAD_SENSOR_SCHEMA = {
+    "name": None,
+    "state_topic": None,
+    "unique_id": None,
     "unit_of_measurement": UnitOfPressure.KPA,
     "device_class": SensorDeviceClass.PRESSURE,
     "state_class": SensorStateClass.MEASUREMENT,
-    "value_template": "{{ value }}", # Assuming direct state publishing
-    "device": None, # Set dynamically with target device identifiers
-    "availability_topic": None, # Set dynamically
+    "value_template": "{{ value }}",
+    "device": None,
+    "availability_topic": None,
     "payload_available": "online",
     "payload_not_available": "offline",
     "enabled_by_default": True,
 }
 
+# MQTT Discovery settings - Number
+DISCOVERY_PAYLOAD_NUMBER_SCHEMA = {
+    "name": None,
+    "state_topic": None,
+    "command_topic": None, # Topic to receive commands
+    "unique_id": None,
+    "unit_of_measurement": UnitOfPressure.KPA, # Same unit
+    "device": None,
+    "availability_topic": None, # Share availability with sensor
+    "payload_available": "online",
+    "payload_not_available": "offline",
+    "min": DEFAULT_THRESHOLD_MIN,
+    "max": DEFAULT_THRESHOLD_MAX,
+    "step": DEFAULT_THRESHOLD_STEP,
+    "mode": NumberMode.SLIDER, # Or NumberMode.BOX
+    "enabled_by_default": True,
+    # "optimistic": False, # We handle state updates, so not optimistic
+    # "retain": True # Command topic doesn't need retain, state topic does
+}
+
+
 class VPDCalculatorMqttPublisher:
-    """Calculates VPD and publishes via MQTT Discovery."""
+    """Calculates VPD and publishes sensor and number entities via MQTT Discovery."""
 
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
         """Initialize the publisher."""
         self.hass = hass
         self.config_entry = config_entry
-        self.config_data = config_entry.data
+        # Make a mutable copy for internal state updates if persisting via config entry
+        self.config_data = dict(config_entry.data)
         self.entry_id = config_entry.entry_id
 
         self._name = self.config_data["name"]
@@ -62,144 +99,240 @@ class VPDCalculatorMqttPublisher:
         self._delta = self.config_data["leaf_delta"]
         self._target_device_id = self.config_data["target_device"]
 
-        # MQTT Topics
+        # --- Internal State for Thresholds ---
+        # Load from stored config entry data or use defaults
+        self._low_threshold = self.config_data.get(CONF_KEY_LOW_THRESHOLD, DEFAULT_LOW_THRESHOLD)
+        self._high_threshold = self.config_data.get(CONF_KEY_HIGH_THRESHOLD, DEFAULT_HIGH_THRESHOLD)
+        # ------------------------------------
+
+        # MQTT Topics - Sensor
         self._base_topic = f"{MQTT_PREFIX}/{self.entry_id}"
-        self._state_topic = f"{self._base_topic}/state"
-        self._availability_topic = f"{self._base_topic}/availability"
-        self._config_topic = f"homeassistant/sensor/{self.entry_id}/config" # Discovery topic
+        self._sensor_state_topic = f"{self._base_topic}/state"
+        self._sensor_availability_topic = f"{self._base_topic}/availability" # Shared availability
+        self._sensor_config_topic = f"homeassistant/sensor/{self.entry_id}/config"
+        self._sensor_mqtt_unique_id = f"{self.entry_id}_vpd_mqtt"
 
-        # Unique ID for the MQTT sensor entity
-        self._mqtt_unique_id = f"{self.entry_id}_vpd_mqtt"
+        # MQTT Topics - Low Threshold Number
+        self._low_thresh_state_topic = f"{self._base_topic}/low_threshold/state"
+        self._low_thresh_command_topic = f"{self._base_topic}/low_threshold/set"
+        self._low_thresh_config_topic = f"homeassistant/number/{self.entry_id}_low/config"
+        self._low_thresh_mqtt_unique_id = f"{self.entry_id}_vpd_low_thresh_mqtt"
 
-        self._target_device_identifiers_for_mqtt = None # Will be looked up
+        # MQTT Topics - High Threshold Number
+        self._high_thresh_state_topic = f"{self._base_topic}/high_threshold/state"
+        self._high_thresh_command_topic = f"{self._base_topic}/high_threshold/set"
+        self._high_thresh_config_topic = f"homeassistant/number/{self.entry_id}_high/config"
+        self._high_thresh_mqtt_unique_id = f"{self.entry_id}_vpd_high_thresh_mqtt"
+
+        # --- Common State ---
+        self._target_device_identifiers_for_mqtt = None
         self._temp_state = None
         self._hum_state = None
         self._vpd_state = None
         self._available = False
-        self._listeners = [] # To store listener removal callbacks
+        self._listeners = []
 
         _LOGGER.debug("[%s] Initialized MQTT Publisher", self.entry_id)
 
     async def async_setup(self) -> None:
-        """Set up MQTT discovery and state listeners."""
+        """Set up MQTT discovery (sensor & numbers) and state listeners."""
         _LOGGER.debug("[%s] Starting setup", self.entry_id)
 
-        # 1. Get target device identifiers
+        # 1. Get target device identifiers (common for all entities)
         dev_reg: DeviceRegistry = async_get_device_registry(self.hass)
         target_device = dev_reg.async_get(self._target_device_id)
         if not target_device:
-            _LOGGER.error(
-                "[%s] Target device ID '%s' not found in registry. Cannot set up MQTT sensor.",
-                self.entry_id,
-                self._target_device_id,
-            )
-            return # Cannot proceed without target device
-
-        # Extract identifiers - expecting tuples like ('mqtt', 'id') or just strings
+            _LOGGER.error("[%s] Target device ID '%s' not found.", self.entry_id, self._target_device_id)
+            return
+        # Extract identifiers
         device_ids_list = []
         for identifier in target_device.identifiers:
-            if isinstance(identifier, (list, tuple)) and len(identifier) >= 1:
-                # If it's a tuple like ('mqtt', 'xyz'), use the second part if available, else first
-                # If it's just ('xyz',), use 'xyz'
+             if isinstance(identifier, (list, tuple)) and len(identifier) >= 1:
                 id_str = str(identifier[1]) if len(identifier) > 1 else str(identifier[0])
                 device_ids_list.append(id_str)
-            elif isinstance(identifier, str):
-                # If it's already a string
+             elif isinstance(identifier, str):
                 device_ids_list.append(identifier)
-
         if not device_ids_list:
-             _LOGGER.error(
-                "[%s] Could not extract usable string identifiers from target device: %s",
-                self.entry_id,
-                target_device.identifiers,
-             )
-             return # Cannot proceed
+             _LOGGER.error("[%s] Could not extract usable identifiers from: %s", self.entry_id, target_device.identifiers)
+             return
+        self._target_device_identifiers_for_mqtt = device_ids_list
+        _LOGGER.debug("[%s] Found target device identifiers for MQTT: %s", self.entry_id, self._target_device_identifiers_for_mqtt)
 
-        self._target_device_identifiers_for_mqtt = device_ids_list # Store the list of strings
-        _LOGGER.debug(
-            "[%s] Found target device identifiers for MQTT: %s",
-            self.entry_id,
-            self._target_device_identifiers_for_mqtt,
+        # Shared device block for discovery payloads
+        device_block = {"identifiers": self._target_device_identifiers_for_mqtt}
+
+        # 2. Publish Discovery - VPD Sensor
+        sensor_payload = DISCOVERY_PAYLOAD_SENSOR_SCHEMA.copy()
+        sensor_payload["name"] = self._name
+        sensor_payload["state_topic"] = self._sensor_state_topic
+        sensor_payload["unique_id"] = self._sensor_mqtt_unique_id
+        sensor_payload["availability_topic"] = self._sensor_availability_topic # Shared topic
+        sensor_payload["device"] = device_block
+        await self._publish_discovery(self._sensor_config_topic, sensor_payload)
+
+        # 3. Publish Discovery - Low Threshold Number
+        low_thresh_payload = DISCOVERY_PAYLOAD_NUMBER_SCHEMA.copy()
+        low_thresh_payload["name"] = f"{self._name} Low Threshold" # Append to base name
+        low_thresh_payload["state_topic"] = self._low_thresh_state_topic
+        low_thresh_payload["command_topic"] = self._low_thresh_command_topic
+        low_thresh_payload["unique_id"] = self._low_thresh_mqtt_unique_id
+        low_thresh_payload["availability_topic"] = self._sensor_availability_topic # Shared topic
+        low_thresh_payload["device"] = device_block
+        # Add specific min/max/step if needed, otherwise uses defaults from schema
+        # low_thresh_payload["min"] = 0.5
+        # low_thresh_payload["max"] = 1.5
+        await self._publish_discovery(self._low_thresh_config_topic, low_thresh_payload)
+
+        # 4. Publish Discovery - High Threshold Number
+        high_thresh_payload = DISCOVERY_PAYLOAD_NUMBER_SCHEMA.copy()
+        high_thresh_payload["name"] = f"{self._name} High Threshold"
+        high_thresh_payload["state_topic"] = self._high_thresh_state_topic
+        high_thresh_payload["command_topic"] = self._high_thresh_command_topic
+        high_thresh_payload["unique_id"] = self._high_thresh_mqtt_unique_id
+        high_thresh_payload["availability_topic"] = self._sensor_availability_topic # Shared topic
+        high_thresh_payload["device"] = device_block
+        # Add specific min/max/step if needed
+        # high_thresh_payload["min"] = 0.8
+        # high_thresh_payload["max"] = 2.0
+        await self._publish_discovery(self._high_thresh_config_topic, high_thresh_payload)
+
+        # 5. Subscribe to Command Topics for Numbers
+        self._listeners.append(
+            await mqtt.async_subscribe(
+                self.hass, self._low_thresh_command_topic, self._handle_low_threshold_command
+            )
+        )
+        self._listeners.append(
+            await mqtt.async_subscribe(
+                self.hass, self._high_thresh_command_topic, self._handle_high_threshold_command
+            )
         )
 
-        # 2. Construct Discovery Payload
-        discovery_payload = DISCOVERY_PAYLOAD_SCHEMA.copy()
-        discovery_payload["name"] = self._name
-        discovery_payload["state_topic"] = self._state_topic
-        discovery_payload["unique_id"] = self._mqtt_unique_id
-        discovery_payload["availability_topic"] = self._availability_topic
-        discovery_payload["device"] = {
-            "identifiers": self._target_device_identifiers_for_mqtt # Use the list of strings directly
-        }
-
-        discovery_json = json.dumps(discovery_payload)
-        _LOGGER.debug("[%s] Publishing discovery to %s: %s", self.entry_id, self._config_topic, discovery_json)
-
-        # 3. Publish Discovery Message
-        await mqtt.async_publish(
-            self.hass, self._config_topic, discovery_json, qos=0, retain=True # Retain config
-        )
-
-        # 4. Set up state listeners for input sensors
+        # 6. Set up state listeners for input sensors
         self._listeners.append(
             async_track_state_change_event(
                 self.hass, [self._temp_id, self._hum_id], self._handle_state_update_event
             )
         )
 
-        # 5. Get initial states and publish first state/availability
-        # Call synchronous helper to get initial states
+        # 7. Get initial states and publish first state/availability
         self._update_initial_states()
-        # Call the now async method to calculate and publish
-        await self._update_and_publish()
+        # Publish initial threshold states
+        await self._publish_threshold_state(self._low_thresh_state_topic, self._low_threshold)
+        await self._publish_threshold_state(self._high_thresh_state_topic, self._high_threshold)
+        # Calculate and publish initial VPD sensor state and availability
+        await self._update_and_publish_vpd()
 
-        _LOGGER.info("[%s] Setup complete. MQTT sensor '%s' configured.", self.entry_id, self._mqtt_unique_id)
+        _LOGGER.info("[%s] Setup complete. MQTT entities configured.", self.entry_id)
+
+    async def _publish_discovery(self, config_topic: str, payload: dict) -> None:
+        """Publish an MQTT discovery message."""
+        discovery_json = json.dumps(payload)
+        _LOGGER.debug("[%s] Publishing discovery to %s: %s", self.entry_id, config_topic, discovery_json)
+        await mqtt.async_publish(self.hass, config_topic, discovery_json, qos=0, retain=True)
+
+    async def _publish_threshold_state(self, topic: str, value: float) -> None:
+        """Publish the state for a threshold number."""
+        _LOGGER.debug("[%s] Publishing threshold state to %s: %s", self.entry_id, topic, value)
+        await mqtt.async_publish(self.hass, topic, str(value), qos=0, retain=True)
+
+    # --- Command Handlers for Numbers ---
+    @callback
+    async def _handle_low_threshold_command(self, msg: MqttMessage) -> None:
+        """Handle new low threshold value from MQTT command topic."""
+        await self._handle_threshold_command(
+            msg, CONF_KEY_LOW_THRESHOLD, self._low_thresh_state_topic, DEFAULT_LOW_THRESHOLD
+        )
+
+    @callback
+    async def _handle_high_threshold_command(self, msg: MqttMessage) -> None:
+        """Handle new high threshold value from MQTT command topic."""
+        await self._handle_threshold_command(
+            msg, CONF_KEY_HIGH_THRESHOLD, self._high_thresh_state_topic, DEFAULT_HIGH_THRESHOLD
+        )
+
+    async def _handle_threshold_command(
+        self, msg: MqttMessage, conf_key: str, state_topic: str, default_value: float
+    ) -> None:
+        """Generic handler for threshold command messages."""
+        try:
+            payload_str = msg.payload.decode("utf-8")
+            new_value = float(payload_str)
+            # Add validation against min/max if desired, using values from DISCOVERY_PAYLOAD_NUMBER_SCHEMA
+            min_val = DISCOVERY_PAYLOAD_NUMBER_SCHEMA["min"]
+            max_val = DISCOVERY_PAYLOAD_NUMBER_SCHEMA["max"]
+            if not (min_val <= new_value <= max_val):
+                raise ValueError(f"Value {new_value} outside range [{min_val}-{max_val}]")
+
+            _LOGGER.debug("[%s] Received threshold command for %s: %s", self.entry_id, conf_key, new_value)
+
+            # Update internal state
+            if conf_key == CONF_KEY_LOW_THRESHOLD:
+                self._low_threshold = new_value
+            elif conf_key == CONF_KEY_HIGH_THRESHOLD:
+                self._high_threshold = new_value
+
+            # Persist change in config entry data
+            self.config_data[conf_key] = new_value
+            self.hass.config_entries.async_update_entry(self.config_entry, data=self.config_data)
+
+            # Publish the validated state back to MQTT state topic
+            await self._publish_threshold_state(state_topic, new_value)
+
+        except ValueError as e:
+            _LOGGER.error(
+                "[%s] Invalid threshold value received on %s: '%s'. Error: %s",
+                self.entry_id, msg.topic, msg.payload, e
+            )
+        except Exception as e:
+             _LOGGER.exception(
+                "[%s] Unexpected error handling threshold command on %s: %s",
+                self.entry_id, msg.topic, e
+            )
 
 
-    # This helper can remain synchronous as it only reads states
+    # --- VPD Sensor State Update Logic ---
     def _update_initial_states(self) -> None:
         """Get initial states of source sensors."""
+        # (Same as before)
         temp_state_obj = self.hass.states.get(self._temp_id)
         hum_state_obj = self.hass.states.get(self._hum_id)
-
+        self._temp_state = None
+        self._hum_state = None
         if temp_state_obj and temp_state_obj.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
             try: self._temp_state = float(temp_state_obj.state)
-            except (ValueError, TypeError): self._temp_state = None
+            except (ValueError, TypeError): pass
         if hum_state_obj and hum_state_obj.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
             try: self._hum_state = float(hum_state_obj.state)
-            except (ValueError, TypeError): self._hum_state = None
+            except (ValueError, TypeError): pass
 
-
-    # This is a callback triggered by the event listener, keep it synchronous
-    # but schedule the async task it needs to run.
     @callback
     def _handle_state_update_event(self, event: Event) -> None:
-        """Handle state changes of source sensors and schedule update."""
+        """Handle state changes of source sensors and schedule VPD update."""
+        # (Modified slightly to only schedule VPD update)
         new_state = event.data.get("new_state")
         entity_id = event.data.get("entity_id")
         _LOGGER.debug("[%s] State change detected for %s", self.entry_id, entity_id)
 
         state_value = None
         if new_state and new_state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
-            try:
-                state_value = float(new_state.state)
-            except (ValueError, TypeError):
-                _LOGGER.warning("[%s] Could not parse state for %s: %s", self.entry_id, entity_id, new_state.state)
-                state_value = None
+            try: state_value = float(new_state.state)
+            except (ValueError, TypeError): state_value = None
 
-        # Update internal state synchronously
-        if entity_id == self._temp_id:
+        needs_update = False
+        if entity_id == self._temp_id and state_value != self._temp_state:
             self._temp_state = state_value
-        elif entity_id == self._hum_id:
+            needs_update = True
+        elif entity_id == self._hum_id and state_value != self._hum_state:
             self._hum_state = state_value
+            needs_update = True
 
-        # Schedule the async calculation and publishing task
-        self.hass.async_create_task(self._update_and_publish())
+        if needs_update:
+            self.hass.async_create_task(self._update_and_publish_vpd())
 
-
-    # This function now needs to be async because it awaits mqtt.async_publish
-    async def _update_and_publish(self) -> None:
+    async def _update_and_publish_vpd(self) -> None:
         """Calculate VPD and publish state and availability via MQTT."""
+        # (Same calculation logic as before)
         old_available = self._available
         old_vpd_state = self._vpd_state
 
@@ -207,6 +340,7 @@ class VPDCalculatorMqttPublisher:
             self._available = False
             self._vpd_state = None
         else:
+            # ... (VPD calculation) ...
             try:
                 temperature = self._temp_state
                 humidity = self._hum_state
@@ -215,48 +349,48 @@ class VPDCalculatorMqttPublisher:
                 es_air = 0.61078 * math.exp((17.27 * temperature) / (temperature + 237.3))
                 ea = (humidity / 100.0) * es_air
                 vpd = es_leaf - ea
-                self._vpd_state = round(max(0.0, vpd), 2) # Ensure >= 0
+                self._vpd_state = round(max(0.0, vpd), 2)
                 self._available = True
-            except (ValueError, TypeError, ZeroDivisionError, OverflowError) as e:
+            except Exception as e:
                 _LOGGER.error("[%s] Error calculating VPD: %s", self.entry_id, e)
                 self._available = False
                 self._vpd_state = None
 
-        # Publish changes
         availability_changed = (old_available != self._available)
-        # Also consider state changed if availability changed from unavailable to available
         state_changed = (self._vpd_state != old_vpd_state) or (availability_changed and self._available)
 
+        # Publish availability change (applies to sensor and numbers)
         if availability_changed:
             payload = "online" if self._available else "offline"
-            _LOGGER.debug("[%s] Publishing availability to %s: %s", self.entry_id, self._availability_topic, payload)
-            # --- Await added ---
-            await mqtt.async_publish(self.hass, self._availability_topic, payload, qos=0, retain=True)
+            _LOGGER.debug("[%s] Publishing availability to %s: %s", self.entry_id, self._sensor_availability_topic, payload)
+            await mqtt.async_publish(self.hass, self._sensor_availability_topic, payload, qos=0, retain=True)
 
-        # Only publish state if available and changed
-        # (No need to publish None/null state when becoming unavailable, availability topic handles that)
+        # Publish VPD sensor state change
         if self._available and state_changed:
-            _LOGGER.debug("[%s] Publishing state to %s: %s", self.entry_id, self._state_topic, self._vpd_state)
-            # --- Await added ---
-            await mqtt.async_publish(self.hass, self._state_topic, str(self._vpd_state), qos=0, retain=True)
+            _LOGGER.debug("[%s] Publishing VPD state to %s: %s", self.entry_id, self._sensor_state_topic, self._vpd_state)
+            await mqtt.async_publish(self.hass, self._sensor_state_topic, str(self._vpd_state), qos=0, retain=True)
 
 
+    # --- Unload Logic ---
     async def async_unload(self) -> bool:
         """Clean up resources."""
         _LOGGER.debug("[%s] Unloading", self.entry_id)
-        # Remove MQTT discovery message
-        _LOGGER.debug("[%s] Publishing empty discovery message to %s", self.entry_id, self._config_topic)
-        # --- Await added ---
-        await mqtt.async_publish(self.hass, self._config_topic, "", qos=0, retain=False)
 
-        # Remove availability message
-        _LOGGER.debug("[%s] Publishing empty availability message to %s", self.entry_id, self._availability_topic)
-         # --- Await added ---
-        await mqtt.async_publish(self.hass, self._availability_topic, "", qos=0, retain=True) # Clear retained availability
+        # Publish empty discovery messages for all entities
+        await mqtt.async_publish(self.hass, self._sensor_config_topic, "", qos=0, retain=False)
+        await mqtt.async_publish(self.hass, self._low_thresh_config_topic, "", qos=0, retain=False)
+        await mqtt.async_publish(self.hass, self._high_thresh_config_topic, "", qos=0, retain=False)
 
-        # Stop listeners
+        # Clear retained availability message
+        await mqtt.async_publish(self.hass, self._sensor_availability_topic, "", qos=0, retain=True)
+
+        # Stop listeners (includes MQTT subscriptions and state trackers)
         for remove_listener in self._listeners:
-            remove_listener()
+            try:
+                remove_listener()
+            except Exception as e:
+                _LOGGER.warning("[%s] Error removing listener during unload: %s", self.entry_id, e)
         self._listeners.clear()
+
         _LOGGER.info("[%s] Unload complete.", self.entry_id)
         return True
