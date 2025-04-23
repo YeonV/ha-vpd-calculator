@@ -260,7 +260,7 @@ class VPDCalculatorMqttPublisher:
             _LOGGER.debug("[%s] Publishing threshold state to %s: %s", self.entry_id, topic, value)
             await mqtt.async_publish(self.hass, topic, str(value), qos=0, retain=True)
 
-     @callback
+    @callback
     async def _handle_min_threshold_command(self, msg: Any) -> None: # Renamed
         """Handle new min threshold value from MQTT command topic."""
         await self._handle_threshold_command(
