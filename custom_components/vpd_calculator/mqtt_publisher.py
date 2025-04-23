@@ -47,9 +47,9 @@ DEFAULT_THRESHOLD_STEP = 0.05
 
 # --- Default Device Info (if target_device not provided) ---
 DEFAULT_DEVICE_INFO = {
-    "identifiers": ["yz_smartgrow"], # Must be a list
-    "name": "Smart Growing",
-    "model": "Blade: YZ-1",
+    "identifiers": ["yz_smartgrowb"], # Must be a list
+    "name": "Smart Growingb",
+    "model": "Blade: YZ-1b",
     "manufacturer": "Yeon",
     "sw_version": "1.0.0",
     "configuration_url": "https://yeonv.com",
