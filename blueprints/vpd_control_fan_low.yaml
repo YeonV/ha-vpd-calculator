@@ -91,13 +91,13 @@ action:
   - wait_for_trigger:
       - platform: template # Use template for flexibility with hysteresis
         value_template: >
-          {{ states(vpd_sensor) | float(99) >
-             (states(min_vpd_threshold_entity) | float(0) + hysteresis | float(0.05)) }}
+          {{ states(!input vpd_sensor) | float(99) >
+             (states(!input min_vpd_threshold_entity) | float(0) + !input hysteresis | float(0.05)) }}
         # Use variables defined within the action scope for clarity
-        variables:
-          vpd_sensor: !input vpd_sensor
-          min_vpd_threshold_entity: !input min_vpd_threshold_entity
-          hysteresis: !input hysteresis
+        # variables:
+        #   vpd_sensor: !input vpd_sensor
+        #   min_vpd_threshold_entity: !input min_vpd_threshold_entity
+        #   hysteresis: !input hysteresis
     timeout:
       minutes: !input wait_timeout # Use input for timeout duration
     # Continue turning off fan even if timeout occurs

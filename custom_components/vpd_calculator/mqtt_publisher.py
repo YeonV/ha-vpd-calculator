@@ -102,7 +102,7 @@ class VPDCalculatorMqttPublisher:
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
         """Initialize the publisher."""
         self.hass = hass
-        self.config_entry = config_entry
+        # self.config_entry = config_entry
         self.config_data = dict(config_entry.data) # Use mutable copy
         self.entry_id = config_entry.entry_id
 
@@ -281,7 +281,7 @@ class VPDCalculatorMqttPublisher:
         """Generic handler for threshold command messages."""
         # --- Use Renamed Keys ---
         try:
-            payload_str = msg.payload.decode("utf-8")
+            payload_str = msg.payload # .decode("utf-8")
             new_value = float(payload_str)
             min_val = DISCOVERY_PAYLOAD_NUMBER_SCHEMA["min"]
             max_val = DISCOVERY_PAYLOAD_NUMBER_SCHEMA["max"]
