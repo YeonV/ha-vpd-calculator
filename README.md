@@ -3,6 +3,7 @@
 [![creator](https://img.shields.io/badge/CREATOR-Yeon-blue.svg?logo=github&logoColor=white)](https://github.com/YeonV) [![creator](https://img.shields.io/badge/A.K.A-Blade-darkred.svg?logo=github&logoColor=white)](https://github.com/YeonV)
 <!-- Add other badges like version, HACS support later -->
 
+
 Calculate Vapor Pressure Deficit (VPD) directly within Home Assistant and link the resulting sensor to an existing device!
 
 This custom integration provides a simple way to create VPD sensors and threshold controls based on existing temperature and humidity sensors in your Home Assistant setup. Unlike standard template sensors defined in YAML, sensors created by this integration can be directly associated with a specific device (like your grow tent controller, weather station, etc.) via the configuration UI, making them appear neatly on that device's page.
