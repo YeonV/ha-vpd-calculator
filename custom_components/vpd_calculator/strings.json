@@ -1,19 +1,58 @@
 {
-    "config": {
-      "step": {
-        "user": {
-          "title": "Configure VPD Calculator",
-          "description": "Select sensors and the device to link the VPD sensor to.",
-          "data": {
-            "name": "Name",
-            "temp_sensor": "Temperature Sensor",
-            "humidity_sensor": "Humidity Sensor",
-            "leaf_delta": "Leaf Temperature Offset (°C/°F)",
-            "target_device": "Target Device"
-          }
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configure VPD Calculator",
+        "description": "Select sensors, optionally link to a device, and choose whether to create threshold controls.",
+        "data": {
+          "name": "Name (for VPD Sensor)",
+          "temp_sensor": "Temperature Sensor",
+          "humidity_sensor": "Humidity Sensor",
+          "leaf_delta": "Leaf Temperature Offset (°C/°F)",
+          "target_device": "Target Device (Optional)",
+          "create_threshold_entities": "Create Min/Max VPD Threshold Controls"
         }
       },
-      "error": {},
-      "abort": {}
-    }
+      "thresholds": {
+         "title": "Set Initial Threshold Values",
+         "description": "Set the initial values for the Min/Max VPD thresholds.",
+         "data": {
+            "initial_min_vpd": "Initial Min VPD (kPa)",
+            "initial_max_vpd": "Initial Max VPD (kPa)"
+         }
+      }
+    },
+    "error": {
+       "min_max_invalid": "Initial Min VPD must be less than Initial Max VPD."
+    },
+    "abort": {}
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Update VPD Calculator Options",
+        "description": "Adjust sensors, device linking, or threshold controls.",
+        "data": {
+          "name": "Name (for VPD Sensor)",
+          "temp_sensor": "Temperature Sensor",
+          "humidity_sensor": "Humidity Sensor",
+          "leaf_delta": "Leaf Temperature Offset (°C/°F)",
+          "target_device": "Target Device (Optional)",
+          "create_threshold_entities": "Create Min/Max VPD Threshold Controls"
+        }
+      },
+      "thresholds_options": {
+        "title": "Update Initial Threshold Values",
+        "description": "Adjust the initial/default values for the Min/Max VPD thresholds (effective on next restart or if numbers reset).",
+        "data": {
+            "initial_min_vpd": "Initial Min VPD (kPa)",
+            "initial_max_vpd": "Initial Max VPD (kPa)"
+        }
+      }
+    },
+     "error": {
+       "min_max_invalid": "Initial Min VPD must be less than Initial Max VPD."
+    },
+    "abort": {}
   }
+}
