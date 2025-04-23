@@ -1,0 +1,113 @@
+# /config/blueprints/automation/YeonV/vpd_control_fan_low.yaml
+# (You can save this file anywhere, but conventionally under blueprints/automation/<username>/<blueprint_name>.yaml)
+
+blueprint:
+  name: VPD Control - Fan on Low VPD
+  description: >-
+    Turns on an exhaust fan when Vapor Pressure Deficit (VPD) drops below a
+    configurable minimum threshold and turns it off when it recovers above
+    that threshold plus a small offset.
+
+    Requires a VPD sensor and Min VPD number entity, likely created by the
+    'VPD Calculator (MQTT Discovery)' integration or similar.
+  domain: automation
+  input:
+    # --- Entity Selectors ---
+    vpd_sensor:
+      name: VPD Sensor
+      description: The sensor entity reporting VPD in kPa.
+      selector:
+        entity:
+          domain: sensor
+          device_class: pressure
+          multiple: false # Only allow selecting one sensor
+
+    min_vpd_threshold_entity:
+      name: Min VPD Threshold Number Entity
+      description: >-
+        The 'number' entity that holds the minimum desired VPD value (e.g., number.vpd_mqtt_test_min_vpd).
+        The fan will turn on when VPD drops below this value.
+      selector:
+        entity:
+          domain: number
+          multiple: false
+
+    fan_switch:
+      name: Fan Switch
+      description: The switch entity that controls the exhaust fan.
+      selector:
+        entity:
+          domain: switch
+          multiple: false
+
+    # --- Optional Configuration ---
+    hysteresis:
+      name: Hysteresis / Recovery Offset (kPa)
+      description: >-
+        How much above the minimum threshold the VPD must rise before the fan turns off.
+        Helps prevent rapid cycling.
+      default: 0.05
+      selector:
+        number:
+          min: 0.01
+          max: 0.5
+          step: 0.01
+          mode: slider
+
+    wait_timeout:
+      name: Wait Timeout (Minutes)
+      description: >-
+        Maximum time to wait for VPD to recover before turning off the fan anyway.
+      default: 30
+      selector:
+        number:
+          min: 5
+          max: 120
+          step: 1
+          mode: box
+          unit_of_measurement: minutes
+
+  # --- Source URL (Optional but Recommended) ---
+  source_url: https://github.com/YeonV/ha-vpd-calculator/blob/main/blueprints/vpd_control_fan_low.yaml # Adjust path if needed
+
+# --- Automation Logic ---
+# Use single trigger based on numeric state crossing the threshold number entity
+trigger:
+  - platform: numeric_state
+    entity_id: !input vpd_sensor
+    # Trigger when below the value of the selected number entity
+    below: !input min_vpd_threshold_entity
+
+# Optional conditions can be added here if needed
+condition: []
+
+action:
+  # 1. Turn on the fan
+  - service: switch.turn_on
+    target:
+      entity_id: !input fan_switch
+
+  # 2. Wait for VPD to recover
+  - wait_for_trigger:
+      - platform: template # Use template for flexibility with hysteresis
+        value_template: >
+          {{ states(vpd_sensor) | float(99) >
+             (states(min_vpd_threshold_entity) | float(0) + hysteresis | float(0.05)) }}
+        # Use variables defined within the action scope for clarity
+        variables:
+          vpd_sensor: !input vpd_sensor
+          min_vpd_threshold_entity: !input min_vpd_threshold_entity
+          hysteresis: !input hysteresis
+    timeout:
+      minutes: !input wait_timeout # Use input for timeout duration
+    # Continue turning off fan even if timeout occurs
+    # (User might want this configurable too, but keep it simple for now)
+    continue_on_timeout: true
+
+  # 3. Turn off the fan
+  - service: switch.turn_off
+    target:
+      entity_id: !input fan_switch
+
+# Prevent overlapping runs
+mode: single
