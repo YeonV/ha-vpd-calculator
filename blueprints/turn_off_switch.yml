@@ -1,0 +1,25 @@
+# /config/blueprints/script/YeonV/turn_off_switch.yaml
+# (Using a more generic name as it just turns off a switch)
+
+blueprint:
+  name: Turn Off Switch
+  description: A simple script to turn off a specified switch entity.
+  domain: script
+  input:
+    # --- Entity Selector ---
+    target_switch:
+      name: Target Switch
+      description: The switch entity to turn off.
+      selector:
+        entity:
+          domain: switch
+          multiple: false
+
+# --- Script Sequence ---
+sequence:
+  - service: switch.turn_on
+    target:
+      entity_id: !input target_switch
+
+# Optional: Add icon for the generated script
+# icon: mdi:power-off # Or something more specific if desired

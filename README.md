@@ -5,7 +5,29 @@
 
 Calculate Vapor Pressure Deficit (VPD) directly within Home Assistant and link the resulting sensor to an existing device!
 
-This custom integration provides a simple way to create VPD sensors based on existing temperature and humidity sensors in your Home Assistant setup. Unlike standard template sensors defined in YAML, sensors created by this integration can be directly associated with a specific device (like your grow tent controller, weather station, etc.) via the configuration UI, making them appear neatly on that device's page.
+This custom integration provides a simple way to create VPD sensors and threshold controls based on existing temperature and humidity sensors in your Home Assistant setup. Unlike standard template sensors defined in YAML, sensors created by this integration can be directly associated with a specific device (like your grow tent controller, weather station, etc.) via the configuration UI, making them appear neatly on that device's page.
+
+![image](https://github.com/user-attachments/assets/1c0d559a-d460-4617-8742-9da4f720df8c)
+
+<details><summary>Device Page</summary>
+
+![image](https://github.com/user-attachments/assets/af7262fd-0a7e-4340-844f-4eae94edf8a9)
+</details>
+
+
+
+## Blueprints
+
+To automate actions based on these values, you can use the following companion blueprints:
+
+| Import Blueprint                                                                                                                                                                                           | Description                                                                                                                                    |
+| :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------- |
+| [![Low VPD Fan](https://img.shields.io/badge/Low_VPD_Fan-blue?logo=home-assistant&logoColor=white&style=flat)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FYeonV%2Fha-vpd-calculator%2Fmain%2Fblueprints%2Fautomation%2FYeonV%2Fvpd_control_fan_low.yaml)          | Controls an exhaust fan, turning it ON when VPD is below the minimum threshold and OFF when it recovers.                                       |
+| [![High VPD Humidifier](https://img.shields.io/badge/High_VPD_Humidifier-blue?logo=home-assistant&logoColor=white&style=flat)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FYeonV%2Fha-vpd-calculator%2Fmain%2Fblueprints%2Fautomation%2FYeonV%2Fvpd_control_humidifier_high.yaml) | Triggers a user-defined action (like pulsing a humidifier script or turning on a switch) when VPD exceeds the maximum threshold. Includes a cooldown period. |
+| [![Button Press](https://img.shields.io/badge/Button_Press-blue?logo=home-assistant&logoColor=white&style=flat)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FYeonV%2Fha-vpd-calculator%2Fmain%2Fblueprints%2Fscript%2FYeonV%2Fsimulate_button_press.yaml)       | Creates a reusable script to simulate a button press by quickly toggling a switch. Useful for hacked devices.                                  |
+| [![Switch Off](https://img.shields.io/badge/Switch_Off-blue?logo=home-assistant&logoColor=white&style=flat)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FYeonV%2Fha-vpd-calculator%2Fmain%2Fblueprints%2Fscript%2FYeonV%2Fturn_off_switch.yaml)                                                    | Creates a simple, reusable script to turn off a specific switch entity.                                                                        |
+
+**Note:** After importing a blueprint using the badges above, you still need to go to **Settings -> Automations & Scenes -> Blueprints** in your Home Assistant instance to find the imported blueprint and click **Create Automation** (or **Create Script**) to configure and create a usable instance.
 
 ## Features
 
