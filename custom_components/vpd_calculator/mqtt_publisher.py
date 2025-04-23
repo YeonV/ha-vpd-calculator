@@ -102,7 +102,7 @@ class VPDCalculatorMqttPublisher:
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
         """Initialize the publisher."""
         self.hass = hass
-        # self.config_entry = config_entry
+        self.config_entry = config_entry
         self.config_data = dict(config_entry.data) # Use mutable copy
         self.entry_id = config_entry.entry_id
 

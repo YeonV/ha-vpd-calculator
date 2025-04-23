@@ -138,7 +138,7 @@ class VPDCalculatorOptionsFlow(OptionsFlow):
 
     def __init__(self, config_entry: ConfigEntry) -> None:
         """Initialize options flow."""
-        self.config_entry = config_entry
+        # self.config_entry = config_entry
         # Store options - start with current config entry data
         self.options = dict(config_entry.data)
 
