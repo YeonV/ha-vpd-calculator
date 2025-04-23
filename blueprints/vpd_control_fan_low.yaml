@@ -89,25 +89,21 @@ action:
 
   # 2. Wait for VPD to recover
   - wait_for_trigger:
-      - platform: template # Use template for flexibility with hysteresis
+      - platform: template
         value_template: >
-          {{ states(!input vpd_sensor) | float(99) >
-             (states(!input min_vpd_threshold_entity) | float(0) + !input hysteresis | float(0.05)) }}
-        # Use variables defined within the action scope for clarity
-        # variables:
-        #   vpd_sensor: !input vpd_sensor
-        #   min_vpd_threshold_entity: !input min_vpd_threshold_entity
-        #   hysteresis: !input hysteresis
+          {{ states(vpd_sensor_id) | float(99) >
+             (states(min_thresh_id) | float(0) + recovery_offset) }}
+    # --- Pass inputs as variables to the wait step ---
+    variables:
+      vpd_sensor_id: !input vpd_sensor
+      min_thresh_id: !input min_vpd_threshold_entity
+      recovery_offset: !input hysteresis
     timeout:
-      minutes: !input wait_timeout # Use input for timeout duration
-    # Continue turning off fan even if timeout occurs
-    # (User might want this configurable too, but keep it simple for now)
+      minutes: !input wait_timeout
     continue_on_timeout: true
 
   # 3. Turn off the fan
   - service: switch.turn_off
     target:
       entity_id: !input fan_switch
-
-# Prevent overlapping runs
 mode: single
