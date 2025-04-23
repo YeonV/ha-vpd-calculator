@@ -50,8 +50,8 @@ _LOGGER = logging.getLogger(__name__)
 
 # --- Default Device Info (if target_device not provided) ---
 DEFAULT_DEVICE_INFO = {
-    "identifiers": ["yz_smartgrow"], # Must be a list
-    "name": "Smart Growing",
+    "identifiers": ["yz_smartgrow2"], # Must be a list
+    "name": "Smart Growing 2",
     "model": "Blade: YZ-1",
     "manufacturer": "Yeon",
     "sw_version": "1.0.0",
