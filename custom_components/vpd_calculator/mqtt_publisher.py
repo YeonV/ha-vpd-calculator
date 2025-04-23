@@ -33,10 +33,10 @@ from homeassistant.helpers.event import async_track_state_change_event
 from .const import (
     DOMAIN,
     MQTT_PREFIX,
-    CONF_KEY_MIN_THRESHOLD, # Renamed
-    CONF_KEY_MAX_THRESHOLD, # Renamed
-    CONF_KEY_INITIAL_MIN_THRESHOLD, # New
-    CONF_KEY_INITIAL_MAX_THRESHOLD, # New
+    CONF_KEY_MIN_THRESHOLD, 
+    CONF_KEY_MAX_THRESHOLD, 
+    CONF_KEY_INITIAL_MIN_THRESHOLD,
+    CONF_KEY_INITIAL_MAX_THRESHOLD,
     CONF_KEY_CREATE_THRESHOLDS,
     DEFAULT_MIN_THRESHOLD,
     DEFAULT_MAX_THRESHOLD,
@@ -50,8 +50,8 @@ _LOGGER = logging.getLogger(__name__)
 
 # --- Default Device Info (if target_device not provided) ---
 DEFAULT_DEVICE_INFO = {
-    "identifiers": ["yz_smartgrow2"], # Must be a list
-    "name": "Smart Growing 2",
+    "identifiers": ["yz_smartgrow"],
+    "name": "Smart Growing",
     "model": "Blade: YZ-1",
     "manufacturer": "Yeon",
     "sw_version": "1.0.0",
@@ -133,15 +133,15 @@ class VPDCalculatorMqttPublisher:
         self._sensor_mqtt_unique_id = f"{self.entry_id}_vpd_mqtt"
 
         # MQTT Topics - Renamed Threshold Numbers
-        self._min_thresh_state_topic = f"{self._base_topic}/min_vpd/state" # Renamed topic
-        self._min_thresh_command_topic = f"{self._base_topic}/min_vpd/set" # Renamed topic
+        self._min_thresh_state_topic = f"{self._base_topic}/min_vpd/state" 
+        self._min_thresh_command_topic = f"{self._base_topic}/min_vpd/set" 
         self._min_thresh_config_topic = f"homeassistant/number/{self.entry_id}_min/config"
-        self._min_thresh_mqtt_unique_id = f"{self.entry_id}_vpd_min_mqtt" # Renamed unique_id
+        self._min_thresh_mqtt_unique_id = f"{self.entry_id}_vpd_min_mqtt" 
 
-        self._max_thresh_state_topic = f"{self._base_topic}/max_vpd/state" # Renamed topic
-        self._max_thresh_command_topic = f"{self._base_topic}/max_vpd/set" # Renamed topic
+        self._max_thresh_state_topic = f"{self._base_topic}/max_vpd/state" 
+        self._max_thresh_command_topic = f"{self._base_topic}/max_vpd/set" 
         self._max_thresh_config_topic = f"homeassistant/number/{self.entry_id}_max/config"
-        self._max_thresh_mqtt_unique_id = f"{self.entry_id}_vpd_max_mqtt" # Renamed unique_id
+        self._max_thresh_mqtt_unique_id = f"{self.entry_id}_vpd_max_mqtt" 
 
         # Common State (same)
         self._device_block_for_mqtt = None
@@ -196,7 +196,7 @@ class VPDCalculatorMqttPublisher:
             _LOGGER.debug("[%s] Creating threshold number entities via MQTT discovery.", self.entry_id)
             # Min Threshold Number (Renamed)
             min_thresh_payload = DISCOVERY_PAYLOAD_NUMBER_SCHEMA.copy()
-            min_thresh_payload["name"] = f"{self._name} Min VPD" # Renamed
+            min_thresh_payload["name"] = f"{self._name} Min" 
             min_thresh_payload["state_topic"] = self._min_thresh_state_topic
             min_thresh_payload["command_topic"] = self._min_thresh_command_topic
             min_thresh_payload["unique_id"] = self._min_thresh_mqtt_unique_id
@@ -206,7 +206,7 @@ class VPDCalculatorMqttPublisher:
 
             # Max Threshold Number (Renamed)
             max_thresh_payload = DISCOVERY_PAYLOAD_NUMBER_SCHEMA.copy()
-            max_thresh_payload["name"] = f"{self._name} Max VPD" # Renamed
+            max_thresh_payload["name"] = f"{self._name} Max" 
             max_thresh_payload["state_topic"] = self._max_thresh_state_topic
             max_thresh_payload["command_topic"] = self._max_thresh_command_topic
             max_thresh_payload["unique_id"] = self._max_thresh_mqtt_unique_id
@@ -217,12 +217,12 @@ class VPDCalculatorMqttPublisher:
             # Subscribe to Command Topics for Numbers
             self._listeners.append(
                 await mqtt.async_subscribe(
-                    self.hass, self._min_thresh_command_topic, self._handle_min_threshold_command # Renamed handler
+                    self.hass, self._min_thresh_command_topic, self._handle_min_threshold_command 
                 )
             )
             self._listeners.append(
                 await mqtt.async_subscribe(
-                    self.hass, self._max_thresh_command_topic, self._handle_max_threshold_command # Renamed handler
+                    self.hass, self._max_thresh_command_topic, self._handle_max_threshold_command 
                 )
             )
             # Publish initial threshold states
@@ -261,7 +261,7 @@ class VPDCalculatorMqttPublisher:
             await mqtt.async_publish(self.hass, topic, str(value), qos=0, retain=True)
 
     @callback
-    async def _handle_min_threshold_command(self, msg: Any) -> None: # Renamed
+    async def _handle_min_threshold_command(self, msg: Any) -> None: 
         """Handle new min threshold value from MQTT command topic."""
         await self._handle_threshold_command(
             msg, CONF_KEY_MIN_THRESHOLD, self._min_thresh_state_topic, DEFAULT_MIN_THRESHOLD
@@ -269,7 +269,7 @@ class VPDCalculatorMqttPublisher:
 
     #fuck you
     @callback
-    async def _handle_max_threshold_command(self, msg: Any) -> None: # Renamed
+    async def _handle_max_threshold_command(self, msg: Any) -> None: 
         """Handle new max threshold value from MQTT command topic."""
         await self._handle_threshold_command(
             msg, CONF_KEY_MAX_THRESHOLD, self._max_thresh_state_topic, DEFAULT_MAX_THRESHOLD
