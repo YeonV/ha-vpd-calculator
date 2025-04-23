@@ -1,0 +1,50 @@
+# /config/blueprints/script/YeonV/simulate_button_press.yaml
+
+blueprint:
+  name: Simulate Button Press (Double Toggle Switch)
+  description: >-
+    Simulates a quick button press by rapidly turning a switch entity ON,
+    then OFF (or ON again depending on interpretation - check description!),
+    useful for controlling devices via hacked relays/transistors.
+    Adjust the delay if needed.
+  domain: script
+  input:
+    # --- Entity Selector ---
+    target_switch:
+      name: Target Switch
+      description: The switch entity connected to the button/transistor to be toggled.
+      selector:
+        entity:
+          domain: switch
+          multiple: false
+
+    # --- Optional Configuration ---
+    pulse_delay:
+      name: Pulse Delay (Milliseconds)
+      description: The delay between the two toggle actions.
+      default: 500
+      selector:
+        number:
+          min: 50
+          max: 2000
+          step: 50
+          mode: slider
+          unit_of_measurement: ms
+
+# --- Script Sequence ---
+# IMPORTANT: Your original script used ON -> delay -> ON.
+# This blueprint uses ON -> delay -> OFF, which is more standard for a pulse.
+# If you truly need ON->delay->ON, change the second service call back.
+sequence:
+  - service: switch.turn_on
+    target:
+      entity_id: !input target_switch
+  - delay:
+      milliseconds: !input pulse_delay
+  - service: switch.turn_on
+  # - service: switch.turn_off # <<< CHANGED FROM YOUR ORIGINAL SCRIPT - Verify this is correct!
+    target:
+      entity_id: !input target_switch
+
+# Optional: Add icon for the generated script
+# icon: mdi:gesture-double-tap

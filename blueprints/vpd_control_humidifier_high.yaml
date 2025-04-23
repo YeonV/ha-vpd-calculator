@@ -1,0 +1,90 @@
+# /config/blueprints/automation/YeonV/vpd_control_humidifier_high.yaml
+
+blueprint:
+  name: VPD Control - Activate Humidifier on High VPD
+  description: >-
+    Triggers an action (typically controlling a humidifier) when Vapor Pressure
+    Deficit (VPD) goes above a configurable maximum threshold.
+    Requires a VPD sensor and Max VPD number entity.
+  domain: automation
+  input:
+    # --- Entity Selectors ---
+    vpd_sensor:
+      name: VPD Sensor
+      description: The sensor entity reporting VPD in kPa.
+      selector:
+        entity:
+          domain: sensor
+          device_class: pressure
+          multiple: false
+
+    max_vpd_threshold_entity:
+      name: Max VPD Threshold Number Entity
+      description: >-
+        The 'number' entity that holds the maximum desired VPD value (e.g., number.vpd_mqtt_test_max_vpd).
+        The action will trigger when VPD goes above this value.
+      selector:
+        entity:
+          domain: number
+          multiple: false
+
+    # --- Action Selector ---
+    humidifier_action:
+      name: Action to Perform
+      description: >-
+        The action to run when high VPD is detected. This could be turning on a switch directly,
+        calling a script (like the 'Simulate Button Press' script), etc.
+      selector:
+        action: {} # Allows selecting any valid Home Assistant action
+
+    # --- Optional Configuration ---
+    cooldown_period:
+       name: Cooldown Period (Minutes)
+       description: >-
+         Minimum time between consecutive triggers of this automation. Prevents rapid cycling.
+       default: 5 # Default to 5 minutes
+       selector:
+         number:
+           min: 0
+           max: 60
+           step: 1
+           mode: slider
+           unit_of_measurement: minutes
+
+  # --- Source URL ---
+  source_url: https://github.com/YeonV/ha-vpd-calculator/blob/main/blueprints/vpd_control_humidifier_high.yaml # Adjust path
+
+# --- Automation Logic ---
+trigger:
+  - platform: numeric_state
+    entity_id: !input vpd_sensor
+    above: !input max_vpd_threshold_entity
+
+# Optional condition to implement cooldown
+condition:
+  - condition: template
+    value_template: >
+      {% set cooldown = states('input_number.blueprint_humidifier_cooldown') | int(5) %} {# Read cooldown from helper #}
+      {% if this.attributes.last_triggered is not none %}
+        {{ (now() - this.attributes.last_triggered).total_seconds() / 60 > cooldown }}
+      {% else %}
+        true {# Always allow first trigger #}
+      {% endif %}
+    # --- Alternative Cooldown (Simpler, uses input directly) ---
+    # value_template: >
+    #   {% if this.attributes.last_triggered is not none %}
+    #     {{ (now() - this.attributes.last_triggered).total_seconds() > (cooldown_period | int(5) * 60) }}
+    #   {% else %}
+    #     true
+    #   {% endif %}
+    # variables: # Define variable for easier access to input
+    #   cooldown_period: !input cooldown_period
+
+
+# --- Action ---
+action: !input humidifier_action # Execute the user-selected action(s)
+
+# Mode 'single' is good, but 'restart' might be better if the action takes time
+# and you want a new high VPD reading to restart the action sequence.
+# Let's stick with single for now unless the action is very long.
+mode: single
