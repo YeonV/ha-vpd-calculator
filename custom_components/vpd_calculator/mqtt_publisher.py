@@ -267,6 +267,7 @@ class VPDCalculatorMqttPublisher:
             msg, CONF_KEY_MIN_THRESHOLD, self._min_thresh_state_topic, DEFAULT_MIN_THRESHOLD
         )
 
+    #fuck you
     @callback
     async def _handle_max_threshold_command(self, msg: Any) -> None: # Renamed
         """Handle new max threshold value from MQTT command topic."""
