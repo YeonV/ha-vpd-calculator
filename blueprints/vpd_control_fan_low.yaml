@@ -1,5 +1,4 @@
 # /config/blueprints/automation/YeonV/vpd_control_fan_low.yaml
-# (You can save this file anywhere, but conventionally under blueprints/automation/<username>/<blueprint_name>.yaml)
 
 blueprint:
   name: VPD Control - Fan on Low VPD
@@ -7,12 +6,9 @@ blueprint:
     Turns on an exhaust fan when Vapor Pressure Deficit (VPD) drops below a
     configurable minimum threshold and turns it off when it recovers above
     that threshold plus a small offset.
-
-    Requires a VPD sensor and Min VPD number entity, likely created by the
-    'VPD Calculator (MQTT Discovery)' integration or similar.
+    Requires a VPD sensor and Min VPD number entity.
   domain: automation
   input:
-    # --- Entity Selectors ---
     vpd_sensor:
       name: VPD Sensor
       description: The sensor entity reporting VPD in kPa.
@@ -20,32 +16,23 @@ blueprint:
         entity:
           domain: sensor
           device_class: pressure
-          multiple: false # Only allow selecting one sensor
-
     min_vpd_threshold_entity:
       name: Min VPD Threshold Number Entity
       description: >-
-        The 'number' entity that holds the minimum desired VPD value (e.g., number.vpd_mqtt_test_min_vpd).
-        The fan will turn on when VPD drops below this value.
+        The 'number' entity that holds the minimum desired VPD value.
       selector:
         entity:
           domain: number
-          multiple: false
-
     fan_switch:
       name: Fan Switch
       description: The switch entity that controls the exhaust fan.
       selector:
         entity:
           domain: switch
-          multiple: false
-
-    # --- Optional Configuration ---
     hysteresis:
       name: Hysteresis / Recovery Offset (kPa)
       description: >-
         How much above the minimum threshold the VPD must rise before the fan turns off.
-        Helps prevent rapid cycling.
       default: 0.05
       selector:
         number:
@@ -53,7 +40,6 @@ blueprint:
           max: 0.5
           step: 0.01
           mode: slider
-
     wait_timeout:
       name: Wait Timeout (Minutes)
       description: >-
@@ -66,46 +52,53 @@ blueprint:
           step: 1
           mode: box
           unit_of_measurement: minutes
-
-  # --- Source URL (Optional but Recommended) ---
-  source_url: https://github.com/YeonV/ha-vpd-calculator/blob/main/blueprints/vpd_control_fan_low.yaml # Adjust path if needed
+  source_url: https://github.com/YeonV/ha-vpd-calculator/blob/main/blueprints/automation/YeonV/vpd_control_fan_low.yaml # Adjust path if needed
 
 # --- Automation Logic ---
-# Use single trigger based on numeric state crossing the threshold number entity
+
+# Define variables at the top level to make inputs accessible in templates
+variables:
+  # Assign blueprint inputs to variables accessible within the automation scope
+  vpd_sensor_input: !input vpd_sensor
+  min_vpd_threshold_input: !input min_vpd_threshold_entity
+  hysteresis_input: !input hysteresis
+  fan_switch_input: !input fan_switch
+  wait_timeout_input: !input wait_timeout
+
 trigger:
   - platform: numeric_state
-    entity_id: !input vpd_sensor
-    below: !input min_vpd_threshold_entity
+    entity_id: !input vpd_sensor # Use input directly for trigger entity
+    below: !input min_vpd_threshold_entity # Use input directly for trigger threshold
 
 condition: []
 
+# Use an explicit sequence for actions
 action:
-  # 1. Turn on the fan
-  - service: switch.turn_on
-    target:
-      entity_id: !input fan_switch
+  - sequence:
+      # 1. Turn on the fan
+      - service: switch.turn_on
+        target:
+          # Use the variable defined above (or !input directly is also fine here)
+          entity_id: '{{ fan_switch_input }}'
 
-  # 2. Wait for VPD to recover
-  - wait_for_trigger:
-      - platform: template
-        # --- Use variables defined at the top level ---
-        value_template: >
-          {{ states(vpd_sensor) | float(99) >
-             (states(min_vpd_threshold_entity) | float(0) + (hysteresis | float(0.05))) }}
-    timeout:
-      minutes: !input wait_timeout
-    continue_on_timeout: true
+      # 2. Wait for VPD to recover
+      - wait_for_trigger:
+          - platform: template
+            # --- Define variables INSIDE the template, using top-level variables ---
+            value_template: >
+              {% set vpd_sensor_id = vpd_sensor_input %}
+              {% set min_thresh_id = min_vpd_threshold_input %}
+              {% set recovery_offset = hysteresis_input | float(0.05) %}
+              {{ states(vpd_sensor_id) | float(99) >
+                 (states(min_thresh_id) | float(0) + recovery_offset) }}
+        timeout:
+          # Use the variable defined above (or !input directly)
+          minutes: '{{ wait_timeout_input }}'
+        continue_on_timeout: true
 
-  # 3. Turn off the fan
-  - service: switch.turn_off
-    target:
-      entity_id: !input fan_switch
+      # 3. Turn off the fan
+      - service: switch.turn_off
+        target:
+          entity_id: '{{ fan_switch_input }}'
 
 mode: single
-
-# --- Add variables at the TOP LEVEL of the automation ---
-variables:
-  vpd_sensor: !input vpd_sensor
-  min_vpd_threshold_entity: !input min_vpd_threshold_entity
-  hysteresis: !input hysteresis
-# --------------------------------------------------------
