@@ -90,14 +90,14 @@ action:
   # 2. Wait for VPD to recover
   - wait_for_trigger:
       - platform: template
+        # --- FIX: Define variables INSIDE the template ---
         value_template: >
+          {% set vpd_sensor_id = vpd_sensor %}
+          {% set min_thresh_id = min_vpd_threshold_entity %}
+          {% set recovery_offset = hysteresis | float(0.05) %}
           {{ states(vpd_sensor_id) | float(99) >
              (states(min_thresh_id) | float(0) + recovery_offset) }}
-    # --- Pass inputs as variables to the wait step ---
-    variables:
-      vpd_sensor_id: !input vpd_sensor
-      min_thresh_id: !input min_vpd_threshold_entity
-      recovery_offset: !input hysteresis
+    # Variables block removed from here
     timeout:
       minutes: !input wait_timeout
     continue_on_timeout: true
@@ -106,4 +106,13 @@ action:
   - service: switch.turn_off
     target:
       entity_id: !input fan_switch
+
 mode: single
+
+# --- Add variables at the TOP LEVEL of the automation ---
+# These make the !input values available within the template scope
+variables:
+  vpd_sensor: !input vpd_sensor
+  min_vpd_threshold_entity: !input min_vpd_threshold_entity
+  hysteresis: !input hysteresis
+# --------------------------------------------------------
