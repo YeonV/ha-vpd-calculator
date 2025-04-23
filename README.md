@@ -2,8 +2,6 @@
 
 [![creator](https://img.shields.io/badge/CREATOR-Yeon-blue.svg?logo=github&logoColor=white)](https://github.com/YeonV) [![creator](https://img.shields.io/badge/A.K.A-Blade-darkred.svg?logo=github&logoColor=white)](https://github.com/YeonV)
 <!-- Add other badges like version, HACS support later -->
-![image](https://github.com/user-attachments/assets/af7262fd-0a7e-4340-844f-4eae94edf8a9)
-![image](https://github.com/user-attachments/assets/1c0d559a-d460-4617-8742-9da4f720df8c)
 
 
 Calculate Vapor Pressure Deficit (VPD) directly within Home Assistant and link the resulting sensor to an existing device!
